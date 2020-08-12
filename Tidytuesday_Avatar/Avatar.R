@@ -1,0 +1,171 @@
+
+#Empezamos importando paquetes.
+
+library(tidytuesdayR)
+library(tidyverse)
+library(tvthemes)
+library(extrafont)
+library(stringi)
+library(ggtext)
+library(ggthemes)
+library(png)
+library(grid)
+
+#Cargamos los datos con la ayuda de tidituesdayR
+
+datos_avatar <- tt_load("2020-08-11")
+
+#Y leemos la documentación:
+  
+readme(datos_avatar)
+
+#Parece que tenemos dos bases de datos:
+  
+avatar <- datos_avatar$avatar
+scena <- datos_avatar$scene_description
+
+avatar
+
+#En la documentación he visto que nos han puesto
+#el tipo de letra de Avatar, lo importaremos.
+
+
+import_avatar()
+loadfonts(quiet = TRUE)
+
+#Primero voy a convertir a factor las variables
+#book, character y chapter (con este último tengo
+#dudas, por lo que crearé una nueva variable).
+
+avatar <- avatar %>%
+  mutate(book = as_factor(book),
+         character = as_factor(character),
+         chapter_fct = as_factor(chapter))
+
+#A continuación voy a contar las palabras de las columnas
+#full_text y de character_words.
+
+avatar <- avatar %>%
+  mutate(
+    words_total = stri_count_words(full_text),
+    words_character = stri_count_words(character_words),
+    words_no_character = (words_total - words_character))
+
+#Crearé una nueva base de datos con los personajes
+#que más palabras tienen en cada libro
+#(me quedaré con los siete que más hablan de cada libro).
+
+avatar_book <- avatar %>%
+  group_by(book, character) %>%
+  summarise(words_book = sum(words_character)) %>%
+  group_by(book) %>%
+  mutate(rank_character = min_rank(desc(words_book))) %>%
+  filter(rank_character < 8) %>%
+  group_by(character) %>%
+  mutate(familia =
+           str_replace_all(character, c("Sokka" = "ura", "Zuko" = "sua",
+                                        "Aang" = "avatar", "Katara" = "ura",
+                                        "Toph" = "lurra", "Azula" = "sua",
+                                        "Iroh" = "sua", "Zhao" = "sua",
+                                        "Jet" = "lurra", "Hama" = "ura")),
+         familia = as_factor(familia))
+
+#Crearemos el gráfico base:
+  
+grafico_base1 <- avatar_book %>%
+  ggplot(aes(x = book, y = desc(rank_character),
+             col = character, group = character)) +
+  geom_point(aes(col=familia)) +
+  geom_line(aes(col=familia), linetype = "longdash") +
+  scale_x_discrete(expand = c(0.1, 0.3)) +
+  scale_colour_manual(values = c("#000066", "#aa0000", "#FF6600", "#003300"))
+
+#Y ahora intentaremos pulirlo:
+  
+grafico_base2 <- grafico_base1 +
+  labs(
+    title = "<b>Chatterbox rank</b><br> <span style = 'font-size:7pt'>
+    <span style = 'color:blue;'>**Sokka**</span> is the one with the most
+    text considering all the books.<br><span style ='color:orange;'>**Aang**</span>
+    and <span style = 'color:blue;'>**Katara**</span> have a downward trajectory.
+    <br><span style = 'color:red;'>**Zuko**</span> is the most irregular.</span>",
+    caption = "Data: 'appa' R package by Avery Robbins
+       Figure: @jonealiri"
+  ) +
+  theme(
+    plot.title.position = "plot",
+    plot.title = element_textbox_simple(
+      size = 13,
+      family = "Slayer",
+      lineheight = 1,
+      padding = margin(15, 15, 15, 15)),
+    plot.caption = element_textbox_simple(
+      size = 9,
+      lineheight = 0.8,
+      padding = margin(10, 10, 10, 10)
+    )) +
+  theme(
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank(),
+    panel.grid.major.y = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.text.x = element_text(family = "Arial"),
+    axis.ticks.x = element_blank(),
+    legend.position = "none",
+    panel.background = element_rect(fill = "#fdf1e9"),
+    plot.background = element_rect(fill = "#fdf1e9")
+  ) +
+  xlab(NULL) + ylab(NULL) 
+
+#Insertamos anotaciones. 
+
+grafico_base3 <- grafico_base2 +
+  annotate("text", x = 3.05, y = -0.95, label = "Sokka",
+           family = "Slayer", size = 3, color = "#000066",
+           hjust = 0) +
+  annotate("text", x = 3.05, y = -1.95, label = "Zuko",
+           family = "Slayer", size = 3, color = "#aa0000",
+           hjust = 0) +
+  annotate("text", x = 3.05, y = -2.95, label = "Aang",
+           family = "Slayer", size = 3, color = "#FF6600",
+           hjust = 0) +
+  annotate("text", x = 3.05, y = -3.95, label = "Katara",
+           family = "Slayer", size = 3, color = "#000066",
+           hjust = 0) +
+  annotate("text", x = 2.05, y = -3.95, label = "Iroh",
+           family = "Slayer", size = 3, color = "#aa0000",
+           hjust = 0) +
+  annotate("text", x = 3.05, y = -4.95, label = "Toph",
+           family = "Slayer", size = 3, color = "#003300",
+           hjust = 0) +
+  annotate("text", x = 3.05, y = -5.95, label = "Azula",
+           family = "Slayer", size = 3, color = "#aa0000",
+           hjust = 0) +
+  annotate("text", x = 1.05, y = -5.95, label = "Zhao",
+           family = "Slayer", size = 3, color = "#aa0000",
+           hjust = 0) +
+  annotate("text", x = 3.05, y = -6.95, label = "Hama",
+           family = "Slayer", size = 3, color = "#000066",
+           hjust = 0) +
+  annotate("text", x = 1.05, y = -6.95, label = "Jet",
+           family = "Slayer", size = 3, color = "#003300",
+           hjust = 0)
+
+#Insertamos imagenes
+
+grafico_base4 <- grafico_base3 +
+  annotation_custom(rasterGrob(readPNG("Sokka.png"), interpolate = TRUE),
+                    xmin = 0.5, xmax = 1, ymin = -3, ymax = -1) +
+  annotation_custom(rasterGrob(readPNG("Zuko.png"), interpolate = TRUE),
+                    xmin = 0.5, xmax = 1, ymin = -4.5, ymax = -3) +
+  annotation_custom(rasterGrob(readPNG("Katara.png"), interpolate = TRUE),
+                    xmin = 0.5, xmax = 1, ymin = -5, ymax = -6.5)
+
+#Está claro que podía haber creado alguna función para
+#las imágenes y las anotaciones. Pero todavía no controlo
+#las funciones, eso lo dejaremos para el futuro.
+
+ggsave("./avatar1.pdf", width = 9, height = 6, device = cairo_pdf)
+
+
