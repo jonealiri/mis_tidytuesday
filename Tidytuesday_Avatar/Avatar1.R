@@ -15,7 +15,7 @@ library(grid)
 
 datos_avatar <- tt_load("2020-08-11")
 
-#Y leemos la documentaciÛn:
+#Y leemos la documentaci√≥n:
   
 readme(datos_avatar)
 
@@ -26,7 +26,7 @@ scena <- datos_avatar$scene_description
 
 avatar
 
-#En la documentaciÛn he visto que nos han puesto
+#En la documentaci√≥n he visto que nos han puesto
 #el tipo de letra de Avatar, lo importaremos.
 
 
@@ -34,15 +34,15 @@ import_avatar()
 loadfonts(quiet = TRUE)
 
 #Primero voy a convertir a factor las variables
-#book, character y chapter (con este ˙ltimo tengo
-#dudas, por lo que crearÈ una nueva variable).
+#book, character y chapter (con este √∫ltimo tengo
+#dudas, por lo que crear√© una nueva variable).
 
 avatar <- avatar %>%
   mutate(book = as_factor(book),
          character = as_factor(character),
          chapter_fct = as_factor(chapter))
 
-#A continuaciÛn voy a contar las palabras de las columnas
+#A continuaci√≥n voy a contar las palabras de las columnas
 #full_text y de character_words.
 
 avatar <- avatar %>%
@@ -51,9 +51,9 @@ avatar <- avatar %>%
     words_character = stri_count_words(character_words),
     words_no_character = (words_total - words_character))
 
-#CrearÈ una nueva base de datos con los personajes
-#que m·s palabras tienen en cada libro
-#(me quedarÈ con los siete que m·s hablan de cada libro).
+#Crear√© una nueva base de datos con los personajes
+#que m√°s palabras tienen en cada libro
+#(me quedar√© con los siete que m√°s hablan de cada libro).
 
 avatar_book <- avatar %>%
   group_by(book, character) %>%
@@ -70,7 +70,7 @@ avatar_book <- avatar %>%
                                         "Jet" = "lurra", "Hama" = "ura")),
          familia = as_factor(familia))
 
-#Crearemos el gr·fico base:
+#Crearemos el gr√°fico base:
   
 grafico_base1 <- avatar_book %>%
   ggplot(aes(x = book, y = desc(rank_character),
@@ -162,8 +162,8 @@ grafico_base4 <- grafico_base3 +
   annotation_custom(rasterGrob(readPNG("Katara.png"), interpolate = TRUE),
                     xmin = 0.5, xmax = 1, ymin = -5, ymax = -6.5)
 
-#Est· claro que podÌa haber creado alguna funciÛn para
-#las im·genes y las anotaciones. Pero todavÌa no controlo
+#Est√° claro que pod√≠a haber creado alguna funci√≥n para
+#las im√°genes y las anotaciones. Pero todav√≠a no controlo
 #las funciones, eso lo dejaremos para el futuro.
 
 ggsave("./avatar1.pdf", width = 9, height = 6, device = cairo_pdf)
