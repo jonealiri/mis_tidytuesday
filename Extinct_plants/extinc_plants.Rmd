@@ -1,0 +1,195 @@
+---
+title: "Tidytuesday_extinct_plants"
+author: "Jone"
+date: "17/8/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r packages, warning=FALSE}
+library(tidyverse)
+library(tidytuesdayR)
+# map
+library(sf)
+library(rnaturalearth)
+library(rnaturalearthdata)
+# combine figures
+library(patchwork)
+library(cowplot)
+```
+
+```{r}
+datos <- tt_load("2020-08-18")
+```
+Let's explore the data:
+
+```{r}
+plants <- datos$plants
+```
+
+
+We have 500 diferent plants, and 24 variables: Name and taxonomic group (6 groups with very different n-s, the majority is from the same group), Country and continent of origin; Year last seen (we can see a period with start and end year e.g. 2000-2020, or only end year e.g. before 2020); 12 threats, 6 actions and extinction category (e.g. Extinct or Extinct in the wild).
+
+Let's tidy the year column, I want a column with the last year.
+
+I also want two more columns: total_threats and total actions (I am not counting the NAs, so they are going to be total known threats and actions).
+
+```{r}
+plants <- plants %>%
+  mutate(
+    last_year = str_extract(
+      year_last_seen, "\\d{4}$"),
+    total_threats = rowSums(.[6:16]),
+    total_actions = rowSums(.[18:22]))
+
+```
+
+
+
+```{r}
+plants_continent <- plants %>%
+  group_by(continent) %>%
+  summarise(
+    extinctions = n(),
+    sum_threats = sum(total_threats),
+    sum_actions = sum(total_actions)
+  )
+
+plants_country <- plants %>%
+  group_by(country) %>%
+  summarise(
+    extinctions = n(),
+    sum_threats = sum(total_threats),
+    sum_actions = sum(total_actions),
+    continent = first(continent)
+    ) %>%
+ mutate(
+    country = case_when(
+      country == "Cabo Verde" ~ "Cape Verde",
+      country == "Congo"      ~ "Democratic Republic of the Congo",
+      country == "Pitcairn"   ~ "Pitcairn Islands",
+      country == "Saint Helena, Ascension and Tristan da Cunha" ~ "Saint Helena",
+      country == "Sao Tome and Principe" ~ "São Tomé and Principe",
+      country == "Viet Nam"              ~ "Vietnam",
+      TRUE                      ~  country
+    )
+  )
+```
+
+There must be a better way to do that (mutate - case_when)... 
+
+## Making the visualization
+
+
+We are going to use `rnaturalearth::ne_countries()` to pull country data and sf classes.
+
+```{r}
+world <- ne_countries(scale = "medium", returnclass = "sf")
+```
+
+And we are going to join the data with plants data by country in order to do the map.
+
+```{r}
+map_plants_data <- left_join(
+  world, plants_country, 
+  by = c("name_long" = "country"))
+```
+
+
+
+```{r}
+map_plants_data <- map_plants_data %>%
+  mutate(
+    extinctions = case_when(
+      is.na(extinctions) ~ "zero",
+      TRUE ~ as.character(extinctions)),
+    extinctions = case_when(
+      extinctions == "zero" ~ 0,
+      TRUE ~ as.numeric(extinctions)),
+    a_cut = cut(extinctions,
+                breaks=c(-Inf, 0, 2, 4, 6, 8, 10, Inf),
+                labels=c("0", "1-2", "3-4", "5-6", "7-8", "9-10", "+10"))
+  ) 
+```
+
+
+```{r}
+map_plant <- ggplot(map_plants_data) +
+  geom_sf(aes(fill=a_cut)) +
+  coord_sf(crs = "+proj=wink1") +
+  scale_fill_manual(values = c("#f0f9e2", "#d6a6b1", "#ad4e64", "#99223e", "#6b172b", "#5b1425", "#000000"),
+                    name = "# of extinct plants") +
+  guides(fill = guide_legend(title.position = "top",
+                             title.hjust = 0.5, nrow = 1,
+                             label.position = "bottom",
+                             keyheight = 0.8,
+                             keywidth = 0.8
+                             )) +
+  theme_minimal() +
+  theme(legend.position = c(0.50, -0.15),
+        legend.title = element_text(size = 9),
+        legend.text = element_text(size = 7),
+        panel.grid.major = 
+          element_line(color = gray(.5),
+                       linetype = "dashed", size = 0.5))
+
+```
+
+
+
+```{r}
+cols <- c("Madagascar" = "red4", "United States" = "red4", "Ecuador" = "red4", "Tanzania" = "salmon4", "Malaysia" = "lightsalmon", "Burundi" = "lightsalmon", "Guinea" = "lightsalmon", "Indonesia" = "lightsalmon", "South Africa" = "lightsalmon", "New Caledonia" = "lightsalmon", "Saint Helena" = "lightsalmon", "Brazil" = "lightsalmon")
+
+extinctions_bar <- plants_country %>%
+  top_n(12, extinctions) %>%
+  group_by(country) %>%
+  summarise(extinctions = sum(extinctions)) %>%
+  ggplot(aes(y = reorder(country, extinctions),
+             x = extinctions)) +
+  geom_col(aes(fill = country), col = "black") +
+  scale_x_continuous(limits = c(0,120)) +
+  scale_fill_manual(values = cols) +
+  geom_text(aes(label = extinctions), hjust = -0.25) +
+  theme_minimal() +
+  theme(legend.position = "none",
+        panel.grid = element_blank(),
+        axis.title = element_blank(),
+        axis.line.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.text.y = element_text(color = "black")
+        )
+  
+  
+```
+
+```{r}
+title2 <- ggplot(data.frame(x = 1:20, y = 1:5)) +
+    labs(
+    title = "Number of extinct plants by country of origin",
+    subtitle = "500 plant species are considered extinct as of 2020. The majority of them were endemic to Madgascar,
+    United States (Hawaiian islands) and Ecuador.",
+    caption = "Data: IUCN | Viz: @jonealiri"
+    ) +
+  theme(plot.caption = element_text(hjust = 0))
+```
+
+
+
+```{r}
+title2 + map_plant + extinctions_bar +
+  plot_layout(widths = c(0,5,2))
+```
+
+```{r}
+ggsave("extinct_plants.pdf",
+  width = 10, height = 5.5, device = cairo_pdf)
+
+pdftools::pdf_convert("extinct_plants.pdf",
+  format = "png", dpi = 350)
+```
+
+
+
