@@ -1,0 +1,247 @@
+---
+title: "TidyTemplate"
+date: 2020-08-24
+output: html_output
+---
+
+# TidyTuesday
+
+Join the R4DS Online Learning Community in the weekly #TidyTuesday event!
+Every week we post a raw dataset, a chart or article related to that dataset, and ask you to explore the data.
+While the dataset will be “tamed”, it will not always be tidy! As such you might need to apply various R for Data Science techniques to wrangle the data into a true tidy format.
+The goal of TidyTuesday is to apply your R skills, get feedback, explore other’s work, and connect with the greater #RStats community!
+As such we encourage everyone of all skills to participate!
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(tidytuesdayR)
+#library(stringr)
+# para separar los ingredientes
+library(splitstackshape)
+# para las fechas
+library(lubridate)
+# para colores
+library(viridis)
+# fuentes
+library(extrafont)
+library(ggtext)
+
+theme_set(theme_classic())
+
+```
+
+# Load the weekly Data
+
+Dowload the weekly data and make available in the `tt` object.
+
+```{r Load}
+
+tt <- tt_load("2020-08-25")
+
+```
+
+
+# Readme
+
+Take a look at the readme for the weekly data to get insight on the dataset.
+This includes a data dictionary, source, and a link to an article on the data.
+
+```{r Readme, eval = interactive()}
+
+tt
+
+chopped <- tt$chopped
+```
+
+
+# Glimpse Data
+
+Take an initial look at the format of the data available.
+
+```{r Glimpse}
+
+glimpse(chopped)
+
+```
+Esta semana tenemos una única base de datos, con 569 observaciones y 21 variables.
+
+Las variables son: 
+
+- *season*: variable numérica que indica la temporada. Esta base de datos contiene información de 45 temporadas (con 13 programas en la mayoría de las temporadas, aunque el rango va de 20 a 8).
+
+- *season_episode*: variable numérica que indica el número del programa dentro de la temporada. 
+
+- *series_episode*: variable numérica que indica el número del programa (tenemos desde 1 hasta 567, es raro pq tenemos 569 observaciones... el capítulo 526 y 527 están dos veces, habrá que mirar si es un error y está duplicado, o son capitulos especiales que tienen otro formato. Ok, son capítulos especiales, no es un error).
+
+- *episode_rating*: variable numérica que indica la puntuación del episodio en una escala de 0 a 10.
+
+- *episode_name*: variable de tipo character que indica el nombre del episodio.
+
+-*episode_notes*: variable de tipo character en el que se indican algunas indicaciones sobre lo que ha sucedido en el episodio (si algún participante ha sido eliminado por no haber hecho algo, si es el primer episodio en el que todos los concursantes son no sé como...).
+
+-*air-date*: variable de tipo character que indica la fecha en el que se emitió el programa en el formato de "January 13, 2009".
+
+-*judge1* a *judge3* variables de tipo character que indican el nombre de los jueces. Si vamos a hacer algo con esto hay que limpiar un poco ya que hay algunos nombres con pequeñas incosistencias (con tilde sin tilde por ejemplo).
+
+-*appetizer*, *entree* y *dessert* variables de tipo character que contienen los ingredientes (separados por comas) de cada plato. El número de ingredientes no es siempre el mismo.
+
+-*contestant1* a *contestant4* variables de tipo character con el nombre de los concursantes.
+
+-*contestant1_info* a *contestant4_info* variables de tipo character con info sobre los concursantes. La info suele ser del tipo de son chefs de no sé qué restaurante y en muchas ocasiones terminan con la abreviatura del estado de EEUU.
+
+
+# Wrangle
+
+Vamos a empezar sacando los ingredientes a diferentes columnas. La función `splitstackshape::cSplit()` es una función muy simple que permite hacer eso. Le indicamos las columnas que queremos que separe y el delimitador, por defecto pondrá los ingredientes en diferentes columnas al final de la base de datos (formato wide, que se puede cambiar a long si se prefiere que ponga los ingredientes en diferentes filas), además indicaremos drop=FALSE para que no elimine la columna original, por si la necesitasemos para algo.
+
+```{r}
+
+chopped2 <- chopped %>%
+  cSplit(c("appetizer", "entree", "dessert"),
+         sep = ",", drop=FALSE)
+
+```
+
+
+También vamos a sacar la información de las fechas. Para esto usaremos el paquete lubridate. Primero con la función `parse_date_time()` convertiremos la variable de tipo cadena a fecha, luego con las funciones `year()` y `month()` crearemos la columna year y la columna month.
+
+```{r}
+chopped2 <- chopped2 %>%
+  mutate(air_date = parse_date_time(air_date, "m%d%y"),
+         year = year(air_date),
+         month = month(air_date))
+
+```
+
+```{r wrangle}
+
+chopped_season <- chopped2 %>%
+  group_by(season) %>%
+  summarise(mean_rating = mean(episode_rating, na.rm = TRUE)) %>%
+  ungroup()
+
+chopped_year <- chopped2 %>%
+  filter(!is.na(episode_rating)) %>%
+  mutate(total_mean = mean(episode_rating, na.rm = TRUE)) %>%
+  group_by(year) %>%
+  mutate(year_mean = mean(episode_rating, na.rm = TRUE),
+         episodes_per_year = n()) %>%
+  ungroup()
+
+```
+
+
+
+# Visualize
+
+
+
+```{r Visualize}
+
+  
+Fig1 <- chopped_year %>%
+  ggplot(aes(x = year_mean, y = year)) +
+  geom_errorbarh(aes(xmin = total_mean, xmax = year_mean),
+                 size = 0.5, colour = "grey", height = 0) +
+  geom_point(aes(size = episodes_per_year)) +
+  scale_x_continuous(breaks = c(7.75, 8.0, 8.25, 8.5, 8.75, 9.0),
+                    limits = c(7.75, 9.0)) +
+  scale_y_continuous(breaks = c(2009:2020)) +
+  theme(axis.title.y = element_blank()) +
+  labs(size ="number of rated episodes",
+       x = "mean rating",
+       y = "",
+       title = "The evolution of mean rating per year")
+
+Fig2 <- chopped2 %>%
+  filter(year < 2020) %>% # only two rated episodes in 2020
+  filter(!is.na(episode_rating)) %>%
+  ggplot(aes(x = episode_rating, y = year, group = year)) +
+  geom_jitter(aes(col = as_factor(season)), size = 1,
+             position = position_jitter(width = 0.1, height = 0.1)) +
+  geom_boxplot(aes(col = as_factor(season), alpha = 0.5),
+               na.rm = TRUE, outlier.shape = NA, width = 0.5) +
+  geom_vline(xintercept = 8.38, linetype="dashed", 
+                color = "red", size=0.5) +
+  coord_flip() +
+  scale_color_viridis_d() +
+  scale_y_continuous(breaks = c(2009:2019)) +
+  scale_x_continuous(breaks = seq(5.0, 10, by=1),
+                    limits = c(5.0, 10)) +
+  theme(panel.grid.major.y = element_line(size = 0.5),
+        legend.position = "none",
+        axis.text = element_text(family = "Dubai", 
+                                 colour = "black",
+                                 size = 10),
+        axis.title = element_text(family = "Dubai", 
+                                 colour = "black",
+                                 size = 12),
+        plot.title = element_text(family = "Dubai", 
+                                 colour = "black",
+                                 size = 16),
+       # plot.background = element_rect(fill = "pink"),
+        ) +
+  labs(x = "Episode rating [0-10]",
+       y = "",
+       title = "Chopped: Evolution of episode ratings (2009-2019)",
+       caption = "source: Kaggle | viz: @jonealiri")
+  
+```
+
+Veamos cómo pódemos mejorar este último gráfico
+
+```{r}
+
+# cuadrado
+Fig2 + 
+  annotate(
+    "rect", ymin = 2015.5, ymax = 2017.5,
+    xmin = 5, xmax = 9.2, fill = "red",  alpha = .1
+    ) +
+  annotate(
+    "text", x = 5.8, y = 2012, hjust = 0, label = "S29-13. Worst Cooks Challenge",
+    family = "Dubai", size = 4
+    ) +
+    annotate(
+    "richtext", x = 9.6, y = 2009.55, hjust = 0, label = "Each dot represent the rating of 1 episode",
+    family = "Dubai", size = 4
+    ) +
+  annotate(
+    "text", x = 7.3, y = 2008, hjust = 0, label = "Mean rating",
+    family = "Dubai", size = 4
+    ) +
+  annotate(
+    geom = "curve", x = 5.5, y = 2014, xend = 5.4, yend = 2015.7, 
+    curvature = .3, arrow = arrow(length = unit(2, "mm"))
+  ) +
+  annotate(
+    geom = "curve", x = 9.6, y = 2009.5, xend = 9.4, yend = 2009, 
+    curvature = .2, arrow = arrow(length = unit(1.5, "mm"))
+  ) +
+  annotate(
+    geom = "segment", x = 7.5, y = 2008.3, xend = 8.2, yend = 2008.3, 
+    curvature = .2, arrow = arrow(length = unit(1.5, "mm"))
+  )
+
+  
+```
+
+
+
+
+# Save Image
+
+Save your image for sharing. Be sure to use the `#TidyTuesday` hashtag in your post on twitter! 
+
+```{r}
+
+ggsave(("Chopped.pdf"),
+  width = 10, height = 5.5, device = cairo_pdf)
+
+pdftools::pdf_convert(("Chopped.pdf"),
+  format = "png", dpi = 350)
+
+```
